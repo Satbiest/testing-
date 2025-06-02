@@ -3,7 +3,7 @@ import pandas as pd
 import altair as alt
 import time
 
-# Simulasi data
+# Data awal
 df = pd.DataFrame({
     'UNIQUE ID': ['7b6d04c9', '1dbecdbe', '46fd6e1c', 'cdb6bf28'],
     'Role': ['Data Analyst', 'Data Scientist', 'Data Analyst', 'AI Engineer'],
@@ -12,20 +12,24 @@ df = pd.DataFrame({
     'Mathematics.Optimization Technique': [3, 3, 1, 5]
 })
 
-st.title("📊 Real-Time Dashboard: Average Score per Mathematics Category")
+st.title("🔄 Infinite Real-Time Streaming: Stacked Bar of Mathematics Score")
 
 # Placeholder chart
 chart_placeholder = st.empty()
 
-# Data akumulasi
+# Data yang akan bertambah terus
 streamed_data = pd.DataFrame()
 
-# Loop streaming per baris
-for i in range(len(df)):
-    # Tambahkan satu baris baru ke data
-    streamed_data = pd.concat([streamed_data, df.iloc[[i]]], ignore_index=True)
+# Infinite loop
+i = 0
+while True:
+    # Ambil baris berdasarkan urutan berulang
+    new_row = df.iloc[[i % len(df)]]
+    
+    # Tambahkan ke data stream
+    streamed_data = pd.concat([streamed_data, new_row], ignore_index=True)
 
-    # Transformasi ke long format
+    # Ubah ke long format untuk Altair
     long_df = pd.melt(
         streamed_data,
         id_vars=['UNIQUE ID'],
@@ -38,10 +42,10 @@ for i in range(len(df)):
         value_name='Score'
     )
 
-    # Hitung rata-rata skor per kategori
+    # Hitung rata-rata skor per kategori per user
     avg_df = long_df.groupby(['Mathematics Category', 'UNIQUE ID'])['Score'].mean().reset_index()
 
-    # Buat stacked bar chart: X = Kategori, Y = Rata-rata, Color = UNIQUE ID
+    # Buat stacked bar chart
     chart = alt.Chart(avg_df).mark_bar().encode(
         x=alt.X('Mathematics Category:N', title='Mathematics Category'),
         y=alt.Y('mean(Score):Q', title='Average Score'),
@@ -52,8 +56,11 @@ for i in range(len(df)):
         height=400
     )
 
-    # Update chart
+    # Tampilkan chart
     chart_placeholder.altair_chart(chart, use_container_width=True)
 
-    # Delay 1 detik
+    # Jeda 1 detik
     time.sleep(1)
+    
+    # Lanjut ke iterasi berikutnya
+    i += 1
