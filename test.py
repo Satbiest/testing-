@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
-import time
 
 # Data awal
 df = pd.DataFrame({
@@ -12,60 +11,62 @@ df = pd.DataFrame({
     'Mathematics.Optimization Technique': [3, 3, 1, 5]
 })
 
-# Judul Dashboard
-st.title("📡 Real-Time Streaming Stacked Bar (Safe Version)")
+st.title("📊 Simulasi Real-Time Stacked Bar: Mathematics Scores")
 
-# Inisialisasi session_state
+# Inisialisasi state
 if 'i' not in st.session_state:
     st.session_state.i = 0
-
 if 'streamed_data' not in st.session_state:
-    st.session_state.streamed_data = pd.DataFrame(columns=df.columns)
+    st.session_state.streamed_data = pd.DataFrame()
 
-# Ambil baris berdasarkan iterasi i
-current_index = st.session_state.i % len(df)
-new_row = df.iloc[[current_index]]
+# Tombol mulai / berhenti
+if 'streaming' not in st.session_state:
+    st.session_state.streaming = False
 
-# Tambahkan ke stream
-st.session_state.streamed_data = pd.concat(
-    [st.session_state.streamed_data, new_row], ignore_index=True
-)
-st.session_state.i += 1
+start = st.button("▶️ Start Streaming")
+stop = st.button("⏹ Stop")
 
-# Transformasi ke format long
-long_df = pd.melt(
-    st.session_state.streamed_data,
-    id_vars=['UNIQUE ID'],
-    value_vars=[
-        'Mathematics.Linear Algebra',
-        'Mathematics.Differential Equations',
-        'Mathematics.Optimization Technique'
-    ],
-    var_name='Mathematics Category',
-    value_name='Score'
-)
+if start:
+    st.session_state.streaming = True
+if stop:
+    st.session_state.streaming = False
 
-# Hitung rata-rata per user per kategori
-avg_df = long_df.groupby(['Mathematics Category', 'UNIQUE ID'])['Score'].mean().reset_index()
+# Jalankan streaming 1 step
+if st.session_state.streaming:
+    i = st.session_state.i
+    new_row = df.iloc[[i % len(df)]]
+    st.session_state.streamed_data = pd.concat(
+        [st.session_state.streamed_data, new_row], ignore_index=True
+    )
+    st.session_state.i += 1
 
-# Visualisasi Stacked Bar
-chart = alt.Chart(avg_df).mark_bar().encode(
-    x=alt.X('Mathematics Category:N', title='Mathematics Category'),
-    y=alt.Y('Score:Q', title='Average Score'),
-    color=alt.Color('UNIQUE ID:N', title='User'),
-    tooltip=['UNIQUE ID', 'Score']
-).properties(
-    width=700,
-    height=400
-)
-
-st.altair_chart(chart, use_container_width=True)
-
-# Jeda aman sebelum rerun
-time.sleep(1.2)
-
-# Coba rerun hanya jika session stabil
-try:
+    # Trigger rerun otomatis setelah delay singkat
     st.experimental_rerun()
-except RuntimeError as e:
-    st.warning("Rerun gagal karena halaman belum selesai dimuat. Silakan refresh secara manual.")
+
+# Visualisasi jika data sudah ada
+if not st.session_state.streamed_data.empty:
+    long_df = pd.melt(
+        st.session_state.streamed_data,
+        id_vars=['UNIQUE ID'],
+        value_vars=[
+            'Mathematics.Linear Algebra',
+            'Mathematics.Differential Equations',
+            'Mathematics.Optimization Technique'
+        ],
+        var_name='Mathematics Category',
+        value_name='Score'
+    )
+
+    avg_df = long_df.groupby(['Mathematics Category', 'UNIQUE ID'])['Score'].mean().reset_index()
+
+    chart = alt.Chart(avg_df).mark_bar().encode(
+        x=alt.X('Mathematics Category:N', title='Mathematics Category'),
+        y=alt.Y('mean(Score):Q', title='Average Score'),
+        color=alt.Color('UNIQUE ID:N', title='User'),
+        tooltip=['UNIQUE ID', 'Score']
+    ).properties(
+        width=700,
+        height=400
+    )
+
+    st.altair_chart(chart, use_container_width=True)
