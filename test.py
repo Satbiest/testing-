@@ -12,26 +12,25 @@ df = pd.DataFrame({
     'Mathematics.Optimization Technique': [3, 3, 1, 5]
 })
 
-st.title("🔄 Infinite Real-Time Streaming: Stacked Bar of Mathematics Score")
+st.title("🧮 Real-Time Stacked Bar Stream (Simulasi Aman)")
 
-# Placeholder chart
-chart_placeholder = st.empty()
+# Simpan state index dan data stream
+if 'index' not in st.session_state:
+    st.session_state.index = 0
+if 'streamed_data' not in st.session_state:
+    st.session_state.streamed_data = pd.DataFrame()
 
-# Data yang akan bertambah terus
-streamed_data = pd.DataFrame()
-
-# Infinite loop
-i = 0
-while True:
-    # Ambil baris berdasarkan urutan berulang
+# Tombol untuk mulai streaming
+if st.button("🚀 Start Streaming"):
+    i = st.session_state.index
     new_row = df.iloc[[i % len(df)]]
-    
-    # Tambahkan ke data stream
-    streamed_data = pd.concat([streamed_data, new_row], ignore_index=True)
+    st.session_state.streamed_data = pd.concat([st.session_state.streamed_data, new_row], ignore_index=True)
+    st.session_state.index += 1
 
-    # Ubah ke long format untuk Altair
+# Ubah ke long format
+if not st.session_state.streamed_data.empty:
     long_df = pd.melt(
-        streamed_data,
+        st.session_state.streamed_data,
         id_vars=['UNIQUE ID'],
         value_vars=[
             'Mathematics.Linear Algebra',
@@ -42,25 +41,13 @@ while True:
         value_name='Score'
     )
 
-    # Hitung rata-rata skor per kategori per user
     avg_df = long_df.groupby(['Mathematics Category', 'UNIQUE ID'])['Score'].mean().reset_index()
 
-    # Buat stacked bar chart
     chart = alt.Chart(avg_df).mark_bar().encode(
-        x=alt.X('Mathematics Category:N', title='Mathematics Category'),
-        y=alt.Y('mean(Score):Q', title='Average Score'),
-        color=alt.Color('UNIQUE ID:N', title='User'),
+        x=alt.X('Mathematics Category:N'),
+        y=alt.Y('mean(Score):Q'),
+        color='UNIQUE ID:N',
         tooltip=['UNIQUE ID', 'Score']
-    ).properties(
-        width=700,
-        height=400
-    )
+    ).properties(width=700, height=400)
 
-    # Tampilkan chart
-    chart_placeholder.altair_chart(chart, use_container_width=True)
-
-    # Jeda 1 detik
-    time.sleep(1)
-    
-    # Lanjut ke iterasi berikutnya
-    i += 1
+    st.altair_chart(chart, use_container_width=True)
