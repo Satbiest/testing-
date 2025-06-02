@@ -12,55 +12,55 @@ df = pd.DataFrame({
     'Mathematics.Optimization Technique': [3, 3, 1, 5]
 })
 
-st.title("🔄 Infinite Real-Time Streaming: Stacked Bar of Mathematics Score")
+st.title("📊 Real-Time Streaming (Loop from Beginning)")
 
-# Placeholder chart
-chart_placeholder = st.empty()
+# Inisialisasi state
+if "i" not in st.session_state:
+    st.session_state.i = 0
+if "streamed_data" not in st.session_state:
+    st.session_state.streamed_data = pd.DataFrame(columns=df.columns)
 
-# Data yang akan bertambah terus
-streamed_data = pd.DataFrame()
+# Ambil data berdasarkan index saat ini
+current_index = st.session_state.i % len(df)
+new_row = df.iloc[[current_index]]
 
-# Infinite loop
-i = 0
-while True:
-    # Ambil baris berdasarkan urutan berulang
-    new_row = df.iloc[[i % len(df)]]
-    
-    # Tambahkan ke data stream
-    streamed_data = pd.concat([streamed_data, new_row], ignore_index=True)
+# Tambahkan baris ke streamed_data
+st.session_state.streamed_data = pd.concat(
+    [st.session_state.streamed_data, new_row],
+    ignore_index=True
+)
 
-    # Ubah ke long format untuk Altair
-    long_df = pd.melt(
-        streamed_data,
-        id_vars=['UNIQUE ID'],
-        value_vars=[
-            'Mathematics.Linear Algebra',
-            'Mathematics.Differential Equations',
-            'Mathematics.Optimization Technique'
-        ],
-        var_name='Mathematics Category',
-        value_name='Score'
-    )
+# Ubah ke format long
+long_df = pd.melt(
+    st.session_state.streamed_data,
+    id_vars=['UNIQUE ID'],
+    value_vars=[
+        'Mathematics.Linear Algebra',
+        'Mathematics.Differential Equations',
+        'Mathematics.Optimization Technique'
+    ],
+    var_name='Mathematics Category',
+    value_name='Score'
+)
 
-    # Hitung rata-rata skor per kategori per user
-    avg_df = long_df.groupby(['Mathematics Category', 'UNIQUE ID'])['Score'].mean().reset_index()
+# Hitung rata-rata
+avg_df = long_df.groupby(['Mathematics Category', 'UNIQUE ID'])['Score'].mean().reset_index()
 
-    # Buat stacked bar chart
-    chart = alt.Chart(avg_df).mark_bar().encode(
-        x=alt.X('Mathematics Category:N', title='Mathematics Category'),
-        y=alt.Y('mean(Score):Q', title='Average Score'),
-        color=alt.Color('UNIQUE ID:N', title='User'),
-        tooltip=['UNIQUE ID', 'Score']
-    ).properties(
-        width=700,
-        height=400
-    )
+# Buat stacked bar chart
+chart = alt.Chart(avg_df).mark_bar().encode(
+    x=alt.X('Mathematics Category:N'),
+    y=alt.Y('Score:Q', title='Average Score'),
+    color='UNIQUE ID:N',
+    tooltip=['UNIQUE ID', 'Score']
+).properties(
+    width=700,
+    height=400
+)
 
-    # Tampilkan chart
-    chart_placeholder.altair_chart(chart, use_container_width=True)
+# Tampilkan chart
+st.altair_chart(chart, use_container_width=True)
 
-    # Jeda 1 detik
-    time.sleep(1)
-    
-    # Lanjut ke iterasi berikutnya
-    i += 1
+# Tambah iterasi dan delay, lalu rerun
+st.session_state.i += 1
+time.sleep(1)
+st.experimental_rerun()
