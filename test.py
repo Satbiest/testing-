@@ -3,7 +3,7 @@ import pandas as pd
 import altair as alt
 import time
 
-# Data awal (static source)
+# Data awal
 df = pd.DataFrame({
     'UNIQUE ID': ['7b6d04c9', '1dbecdbe', '46fd6e1c', 'cdb6bf28'],
     'Role': ['Data Analyst', 'Data Scientist', 'Data Analyst', 'AI Engineer'],
@@ -12,23 +12,27 @@ df = pd.DataFrame({
     'Mathematics.Optimization Technique': [3, 3, 1, 5]
 })
 
-st.title("📡 Real-Time Streaming Stacked Bar (No Clicks)")
+# Judul Dashboard
+st.title("📡 Real-Time Streaming Stacked Bar (Safe Version)")
 
-# Inisialisasi session state
-if "i" not in st.session_state:
+# Inisialisasi session_state
+if 'i' not in st.session_state:
     st.session_state.i = 0
-if "streamed_data" not in st.session_state:
-    st.session_state.streamed_data = pd.DataFrame()
 
-# Ambil baris berikutnya berdasarkan index modulo
-i = st.session_state.i
-new_row = df.iloc[[i % len(df)]]
+if 'streamed_data' not in st.session_state:
+    st.session_state.streamed_data = pd.DataFrame(columns=df.columns)
+
+# Ambil baris berdasarkan iterasi i
+current_index = st.session_state.i % len(df)
+new_row = df.iloc[[current_index]]
+
+# Tambahkan ke stream
 st.session_state.streamed_data = pd.concat(
     [st.session_state.streamed_data, new_row], ignore_index=True
 )
 st.session_state.i += 1
 
-# Transformasi untuk chart
+# Transformasi ke format long
 long_df = pd.melt(
     st.session_state.streamed_data,
     id_vars=['UNIQUE ID'],
@@ -41,12 +45,13 @@ long_df = pd.melt(
     value_name='Score'
 )
 
+# Hitung rata-rata per user per kategori
 avg_df = long_df.groupby(['Mathematics Category', 'UNIQUE ID'])['Score'].mean().reset_index()
 
-# Stacked bar chart
+# Visualisasi Stacked Bar
 chart = alt.Chart(avg_df).mark_bar().encode(
     x=alt.X('Mathematics Category:N', title='Mathematics Category'),
-    y=alt.Y('mean(Score):Q', title='Average Score'),
+    y=alt.Y('Score:Q', title='Average Score'),
     color=alt.Color('UNIQUE ID:N', title='User'),
     tooltip=['UNIQUE ID', 'Score']
 ).properties(
@@ -56,8 +61,11 @@ chart = alt.Chart(avg_df).mark_bar().encode(
 
 st.altair_chart(chart, use_container_width=True)
 
-# Delay singkat agar bisa terlihat
-time.sleep(1)
+# Jeda aman sebelum rerun
+time.sleep(1.2)
 
-# Auto rerun (kunci ilusi streaming!)
-st.experimental_rerun()
+# Coba rerun hanya jika session stabil
+try:
+    st.experimental_rerun()
+except RuntimeError as e:
+    st.warning("Rerun gagal karena halaman belum selesai dimuat. Silakan refresh secara manual.")
