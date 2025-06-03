@@ -5,7 +5,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 # Load dataset (pastikan file 'data_umkm.csv' ada di folder yang sama)
 @st.cache_data
 def load_data():
-    df = pd.read_csv('data_umkm.csv')
+    df = pd.read_csv('data.csv')
     # Pastikan kolom tenaga kerja dalam bentuk integer
     df['tenaga_kerja_perempuan'] = df['tenaga_kerja_perempuan'].fillna(0).astype(int)
     df['tenaga_kerja_laki_laki'] = df['tenaga_kerja_laki_laki'].fillna(0).astype(int)
