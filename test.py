@@ -1,122 +1,106 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
 from sklearn.metrics.pairwise import cosine_similarity
 
-# --- Load data ---
+# Load dataset (pastikan file 'data_umkm.csv' ada di folder yang sama)
 @st.cache_data
 def load_data():
-    df = pd.read_csv('data.csv')
-    # Pastikan kolom tahun_berdiri berupa int
-    df['tahun_berdiri'] = pd.to_numeric(df['tahun_berdiri'], errors='coerce').fillna(0).astype(int)
+    df = pd.read_csv('data_umkm.csv')
+    # Pastikan kolom tenaga kerja dalam bentuk integer
+    df['tenaga_kerja_perempuan'] = df['tenaga_kerja_perempuan'].fillna(0).astype(int)
+    df['tenaga_kerja_laki_laki'] = df['tenaga_kerja_laki_laki'].fillna(0).astype(int)
     return df
 
 df = load_data()
 
-# --- Input User ---
-st.title("UMKM Optimasi & Rekomendasi")
+st.title("Recommender System UMKM (Content-Based Filtering)")
 
-nama_usaha_list = df['nama_usaha'].dropna().unique()
-nama_usaha_input = st.selectbox("Cari Nama Usaha", nama_usaha_list)
+# User input - Nama Usaha dengan search box
+nama_usaha_input = st.text_input("Masukkan Nama Usaha (search engine)")
 
-aset_input = st.number_input("Masukkan Nilai Aset (Rp)", min_value=0, step=1000000)
-kapasitas_input = st.number_input("Masukkan Kapasitas Produksi", min_value=0, step=1)
+# Input aset dan kapasitas produksi
+aset_input = st.number_input("Masukkan Nilai Aset (Rp)", min_value=0, value=1000000, step=100000)
+kapasitas_input = st.number_input("Masukkan Kapasitas Produksi", min_value=0, value=100, step=1)
 
-# --- Proses content-based filtering ---
-if st.button("Proses Rekomendasi"):
-    if nama_usaha_input not in df['nama_usaha'].values:
-        st.error("Nama usaha tidak ditemukan di database.")
+if st.button("Rekomendasi"):
+    # Cari usaha berdasarkan nama usaha (case-insensitive substring match)
+    df_filtered = df[df['nama_usaha'].str.contains(nama_usaha_input, case=False, na=False)]
+    
+    if df_filtered.empty:
+        st.warning("Usaha dengan nama tersebut tidak ditemukan.")
     else:
-        usaha_user = df[df['nama_usaha'] == nama_usaha_input].iloc[0]
-
-        fitur_categorical = ['jenis_usaha', 'marketplace', 'status_legalitas']
-        fitur_numerical = ['aset', 'kapasitas_produksi', 'tahun_berdiri']
-
-        # Encoding categorical
-        encoder = OneHotEncoder(handle_unknown='ignore')
-        fitur_cat_encoded = encoder.fit_transform(df[fitur_categorical])
-
-        # Normalisasi numerical
-        scaler = MinMaxScaler()
-        fitur_num_scaled = scaler.fit_transform(df[fitur_numerical])
-
-        # Gabungkan fitur
-        fitur_all = np.hstack([fitur_cat_encoded.toarray(), fitur_num_scaled])
-
-        # Vektor input user
-        input_cat = encoder.transform([usaha_user[fitur_categorical]])
-        input_num = scaler.transform([[aset_input, kapasitas_input, usaha_user['tahun_berdiri']]])
-        input_vec = np.hstack([input_cat.toarray(), input_num])
-
-        # Hitung similarity
-        similarities = cosine_similarity(input_vec, fitur_all).flatten()
-
+        # Ambil usaha pertama yang cocok sebagai usaha user
+        usaha_user = df_filtered.iloc[0].copy()
+        
+        # Update nilai aset dan kapasitas produksi dari input user
+        usaha_user['aset'] = aset_input
+        usaha_user['kapasitas_produksi'] = kapasitas_input
+        
+        # Pastikan tenaga kerja dalam bentuk integer
+        usaha_user['tenaga_kerja_perempuan'] = int(usaha_user['tenaga_kerja_perempuan'])
+        usaha_user['tenaga_kerja_laki_laki'] = int(usaha_user['tenaga_kerja_laki_laki'])
+        
+        # Pilih fitur numerik untuk similarity
+        fitur = ['aset', 'kapasitas_produksi', 'tenaga_kerja_perempuan', 'tenaga_kerja_laki_laki', 'laba', 'omset']
+        
+        # Handle NaN dengan mengisi nol agar similarity berjalan lancar
+        df[fitur] = df[fitur].fillna(0)
+        
+        # Buat matriks fitur
+        fitur_matrix = df[fitur].values
+        
+        # Vektor usaha user
+        user_vector = usaha_user[fitur].values.reshape(1, -1)
+        
+        # Hitung cosine similarity
+        similarity = cosine_similarity(user_vector, fitur_matrix)[0]
+        
+        # Tambahkan similarity ke dataframe
+        df['similarity'] = similarity
+        
         # Ambil top 5 usaha mirip (kecuali usaha user sendiri)
-        top_indices = similarities.argsort()[-6:][::-1]  # 6 karena satu adalah usaha user
-        top_indices = top_indices[top_indices != usaha_user.name][:5]  # exclude self
-
-        top_usaha = df.iloc[top_indices]
-
-        # Rata-rata usaha mirip
-        rata_rata_omset = top_usaha['omset'].mean()
-        rata_rata_laba = top_usaha['laba'].mean()
-        rata_rata_tenaga_perempuan = top_usaha['tenaga_kerja_perempuan'].mean()
-        rata_rata_tenaga_laki = top_usaha['tenaga_kerja_laki_laki'].mean()
-        rata_rata_biaya_karyawan = top_usaha['biaya_karyawan'].mean()
-        rata_rata_pelanggan = top_usaha['jumlah_pelanggan'].mean()
-
-        # Output detail usaha user
-        st.subheader("Informasi Usaha Anda")
+        df_similar = df[df['id_umkm'] != usaha_user['id_umkm']].sort_values(by='similarity', ascending=False).head(5)
+        
+        # Rata-rata untuk fitur yang diinginkan dari usaha mirip
+        rata_rata_omset = df_similar['omset'].mean()
+        rata_rata_laba = df_similar['laba'].mean()
+        rata_rata_tenaga_perempuan = int(round(df_similar['tenaga_kerja_perempuan'].mean()))
+        rata_rata_tenaga_laki = int(round(df_similar['tenaga_kerja_laki_laki'].mean()))
+        rata_rata_jumlah_pelanggan = df_similar['jumlah_pelanggan'].mean()
+        
+        # Output hasil
+        st.header("Informasi Usaha")
         st.write(f"**Nama Usaha:** {usaha_user['nama_usaha']}")
         st.write(f"**Jenis Usaha:** {usaha_user['jenis_usaha']}")
         st.write(f"**Tahun Berdiri:** {usaha_user['tahun_berdiri']}")
         st.write(f"**Status Legalitas:** {usaha_user['status_legalitas']}")
         st.write(f"**Marketplace Saat Ini:** {usaha_user['marketplace']}")
-        st.write(f"**Omset Saat Ini:** Rp {usaha_user['omset']:,.0f}")
-        st.write(f"**Laba Saat Ini:** Rp {usaha_user['laba']:,.0f}")
-        st.write(f"**Tenaga Kerja Perempuan:** {usaha_user['tenaga_kerja_perempuan']}")
-        st.write(f"**Tenaga Kerja Laki-laki:** {usaha_user['tenaga_kerja_laki_laki']}")
-        st.write(f"**Biaya Karyawan Saat Ini:** Rp {usaha_user['biaya_karyawan']:,.0f}")
-
-        # Rekomendasi optimasi berdasarkan usaha mirip
+        
+        st.markdown("---")
         st.subheader("💰 Rekomendasi Optimalisasi Omset & Laba")
-        st.write(f"Potensi Omset Optimal: Rp {rata_rata_omset:,.0f}")
-        st.write(f"Potensi Laba Optimal: Rp {rata_rata_laba:,.0f}")
-
-        # Efisiensi tenaga kerja
+        st.write(f"Omset Saat Ini: Rp {usaha_user['omset']:,}")
+        st.write(f"Laba Saat Ini: Rp {usaha_user['laba']:,}")
+        st.write(f"Potensi Omset Optimal (rata-rata usaha sejenis): Rp {int(rata_rata_omset):,}")
+        st.write(f"Potensi Laba Optimal (rata-rata usaha sejenis): Rp {int(rata_rata_laba):,}")
+        
+        st.markdown("---")
         st.subheader("👥 Rekomendasi Efisiensi SDM & Biaya")
-        st.write(f"Rata-rata Tenaga Kerja Perempuan pada usaha mirip: {rata_rata_tenaga_perempuan:.1f}")
-        st.write(f"Rata-rata Tenaga Kerja Laki-laki pada usaha mirip: {rata_rata_tenaga_laki:.1f}")
-        st.write(f"Rata-rata Biaya Karyawan pada usaha mirip: Rp {rata_rata_biaya_karyawan:,.0f}")
-
-        # Estimasi penghematan biaya jika disesuaikan dengan rata-rata
-        biaya_karyawan_sekarang = usaha_user['biaya_karyawan']
-        penghematan = biaya_karyawan_sekarang - rata_rata_biaya_karyawan
-        if penghematan > 0:
-            st.write(f"💡 Potensi Penghematan Biaya Karyawan: Rp {penghematan:,.0f}")
-        else:
-            st.write("💡 Biaya karyawan Anda sudah efisien dibanding usaha sejenis.")
-
-        # Estimasi pelanggan untuk optimasi omset
-        st.write(f"Estimasi Target Pelanggan: {rata_rata_pelanggan:.0f}")
-
-        # Analisis kompetitor sejenis
+        st.write(f"Tenaga Kerja Perempuan Saat Ini: {usaha_user['tenaga_kerja_perempuan']}")
+        st.write(f"Tenaga Kerja Laki-laki Saat Ini: {usaha_user['tenaga_kerja_laki_laki']}")
+        st.write(f"Rata-rata Tenaga Kerja Perempuan usaha mirip: {rata_rata_tenaga_perempuan}")
+        st.write(f"Rata-rata Tenaga Kerja Laki-laki usaha mirip: {rata_rata_tenaga_laki}")
+        
+        st.markdown("---")
         st.subheader("📊 Analisis Kompetitor Sejenis")
-        usaha_sejenis = df[df['jenis_usaha'] == usaha_user['jenis_usaha']]
-        st.write(f"Jumlah usaha sejenis: {len(usaha_sejenis)}")
-        st.write(f"Rata-rata aset: Rp {usaha_sejenis['aset'].mean():,.0f}")
-        st.write(f"Rata-rata laba: Rp {usaha_sejenis['laba'].mean():,.0f}")
-        st.write(f"Rata-rata pelanggan: {usaha_sejenis['jumlah_pelanggan'].mean():,.0f}")
-
-        legalitas_terdaftar = usaha_sejenis[usaha_sejenis['status_legalitas'] != 'Belum Terdaftar']
-        if len(legalitas_terdaftar) > 0:
-            laba_terdaftar = legalitas_terdaftar['laba'].mean()
-            laba_belum = usaha_sejenis[usaha_sejenis['status_legalitas'] == 'Belum Terdaftar']['laba'].mean()
-            peningkatan_persen = ((laba_terdaftar - laba_belum) / abs(laba_belum)) * 100 if laba_belum != 0 else 0
-            st.write(f"Usaha terdaftar cenderung memiliki laba {peningkatan_persen:.1f}% lebih tinggi.")
-
-        # Tampilkan usaha mirip sebagai referensi
-        st.subheader("Usaha Mirip (Referensi)")
-        st.dataframe(top_usaha[['nama_usaha', 'jenis_usaha', 'aset', 'kapasitas_produksi', 'omset', 'laba']])
-
+        st.write(f"Jumlah usaha sejenis: {len(df_similar)}")
+        st.write(f"Rata-rata aset: Rp {int(df_similar['aset'].mean()):,}")
+        st.write(f"Rata-rata laba: Rp {int(df_similar['laba'].mean()):,}")
+        st.write(f"Rata-rata pelanggan: {int(df_similar['jumlah_pelanggan'].mean()):,}")
+        
+        # Contoh insight sederhana
+        usaha_terdaftar = df_similar[df_similar['status_legalitas'].str.lower() == 'terdaftar']
+        if not usaha_terdaftar.empty:
+            rata_laba_terdaftar = usaha_terdaftar['laba'].mean()
+            rata_laba_non_terdaftar = df_similar[~df_similar.index.isin(usaha_terdaftar.index)]['laba'].mean()
+            if rata_laba_terdaftar > rata_laba_non_terdaftar:
+                st.write("✅ Usaha dengan status legalitas terdaftar cenderung memiliki laba lebih tinggi.")
