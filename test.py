@@ -7,7 +7,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 # --- Load data ---
 @st.cache_data
 def load_data():
-    df = pd.read_csv('data_umkm.csv')
+    df = pd.read_csv('data.csv')
     # Pastikan kolom tahun_berdiri berupa int
     df['tahun_berdiri'] = pd.to_numeric(df['tahun_berdiri'], errors='coerce').fillna(0).astype(int)
     return df
